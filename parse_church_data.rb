@@ -45,9 +45,10 @@ def define_csv_format(options={})
                     :elder => "Elder",                           # key matches @input_data_rows
                     :address => "Address",                       # key matches @input_data_rows
                     :city_state_zip => "City_State_Zip",         # key matches @input_data_rows
-                    :city => "City",
-                    :state => "State",
-                    :zip => "Zip",
+                    :city => "City",                             # generated from city_state_zip above
+                    :state => "State",                           # generated from city_state_zip above
+                    :zip => "Zip",                               # generated from city_state_zip above
+                    :area => "Area",                             # generated based on zip code
                     }
   
   # Hash here used to give warning if someone is assigned to wrong elder!
@@ -125,6 +126,41 @@ def print_data(options={})
       puts CSV.generate_line(Array[zip,count])
     end
  
+  when :area
+    no_area_assigned = false
+    if @command_options[:noaddr]
+      puts CSV.generate_line(Array["Area","Family"])
+    else
+      puts CSV.generate_line(Array["Area","Family","Address","City","State","Zip"])
+    end
+    @area_zips.keys.each do |area|
+      @final_data.each do |record|
+        unless record[:name].nil?
+          if record[:area] == area
+            @area_zips[area] = @area_zips[area] + 1
+            if @command_options[:noaddr]
+              puts CSV.generate_line(Array[area,record[:name]])
+            else
+              puts CSV.generate_line(Array[area,record[:name],record[:address],record[:city],record[:state],record[:zip]])
+            end
+          end
+          if record[:area] == :austin
+            no_area_assigned = true
+          end
+        end
+      end
+    end
+    puts "\nWARNING:  Folks in Austin not assigned to area!!" if no_area_assigned
+
+if 1 == 0
+
+    puts "*****************"
+    puts CSV.generate_line(Array["AREA","COUNT"])
+    @area_zips.keys.each do |area|
+      puts CSV.generate_line(Array[area,@area_zips[area]])
+    end
+end
+
   else
     fail "ERROR in print_datoa"
   end
@@ -219,6 +255,18 @@ def read_data(options={})
 end
 
 #
+# remove no-name records
+#
+def clean_no_names(options={})
+  @final_data.each_index do |i|
+    if record[:name].nil?   # remove no-name records
+      @final_data.delete_at(i)
+      next
+    end
+  end
+end
+
+#
 # clean up data from any issues
 #
 def clean_data(options={})
@@ -273,6 +321,110 @@ def clean_data(options={})
     end
     
   end
+end
+
+#
+# assign congregation members to certain areas
+# by zip code
+#
+def assign_areas(options={})
+  options = {
+            }.merge(options)
+
+  # assign zip codes to areas
+  @area_zips = {
+     # Part of Austin
+     :south => 0,            # south of the river
+     :central => 0,          # near church, downtown
+     :north => 0,            # north 183N not quite out of town yet
+     :northwest => 0,        # cedar park, lake travis
+
+     # Austin Outskirts
+     :waynorth => 0,         # pflugerville, round rock, georgetown
+     :east => 0,             # manor, elgin, hutto
+
+     # Outside Austin
+     :texas => 0,            # outside austin area but still in Texas
+     :outside_texas => 0,    # outside Texas
+
+     # Debug / Error checking
+     :austin => 0,           # for error checking / debug
+     :other => 0,            # for error checking / debug
+  }
+
+  @final_data.each_index do |i|
+    record = @final_data[i]
+
+    if record[:state] == 'TX'
+      @final_data[i][:area] = :texas     # Folks outside any of the cities below but still in Texas
+    
+      if record[:city] == 'Austin'       # Folks in Austin
+        @final_data[i][:area] = :austin  # Don't want any left in Austin :area, all should here be assigned to a zip code below!
+        case @final_data[i][:zip]
+        when '78749','78739','78735','78736','78737','78745','78748','78704','78744','78747','78742','78746','78738','78733'
+          @final_data[i][:area] = :south
+        when '78703','78705','78751','78701','78712','78751','78756','78702','78731','78752','78767'
+          @final_data[i][:area] = :central
+        when '78758','78757','78759','78753','78729','78708','78727'
+          @final_data[i][:area] = :north
+        when '78717','78726','78730','78732','78750'
+          @final_data[i][:area] = :northwest
+        when '78725','78724','78754','78723','78741'
+          @final_data[i][:area] = :east
+        when '78728'
+          @final_data[i][:area] = :waynorth
+        end
+      # cities near to Austin
+      elsif record[:city] == 'Del valle'
+        @final_data[i][:area] = :east
+      elsif record[:city] == 'Manchaca'
+        @final_data[i][:area] = :south
+      elsif record[:city] == 'Buda'
+        @final_data[i][:area] = :south
+      elsif record[:city] == 'Lockhart'
+        @final_data[i][:area] = :south
+      elsif record[:city] == 'Kyle'
+        @final_data[i][:area] = :south
+      elsif record[:city] == 'San marcos'
+        @final_data[i][:area] = :south
+      elsif record[:city] == 'Pflugerville'
+        @final_data[i][:area] = :waynorth
+      elsif record[:city] == 'Granger'
+        @final_data[i][:area] = :waynorth
+      elsif record[:city] == 'Round rock'
+        @final_data[i][:area] = :waynorth
+      elsif record[:city] == 'Georgetown'
+        @final_data[i][:area] = :waynorth
+      elsif record[:city] == 'Manor'
+        @final_data[i][:area] = :east
+      elsif record[:city] == 'Webberville'
+        @final_data[i][:area] = :east
+      elsif record[:city] == 'Elgin'
+        @final_data[i][:area] = :east
+      elsif record[:city] == 'Bastrop'
+        @final_data[i][:area] = :east
+      elsif record[:city] == 'Cedar park'
+        @final_data[i][:area] = :northwest
+      elsif record[:city] == 'Hutto'
+        @final_data[i][:area] = :waynorth
+      elsif record[:city] == 'Lake travis'
+        @final_data[i][:area] = :northwest
+      elsif record[:city] == 'Lago vista'
+        @final_data[i][:area] = :northwest
+      elsif record[:city] == 'Lakeway'
+        @final_data[i][:area] = :northwest
+      elsif record[:city] == 'Leander'
+        @final_data[i][:area] = :northwest
+      elsif record[:city] == 'Spicewood'
+        @final_data[i][:area] = :northwest
+      end
+
+    else  # Folks outside of Texas (poor souls!)
+      @final_data[i][:area] = :outside_texas
+    end
+  end
+    
+  
 end
 
 #
@@ -338,7 +490,7 @@ end
 
 # main basically
 begin
-              
+
   # interpret command line options
   @command_options = {}
   option_parser = OptionParser.new do |opts|
@@ -346,9 +498,11 @@ begin
     opts.separator ''
     
     opts.on('-h', '--help', 'Display help' ) { puts opts; exit }
-    opts.on('-e', 'Output elders only' ) { |e| @command_options[:elders_only] = true }
+    opts.on('-e', 'Output Elders Info only' ) { |e| @command_options[:elders_only] = true }
     opts.on('-d', 'Debug data output') { |d| @command_options[:debug] = true}
-    opts.on('-z', 'Output By Zip') { |d| @command_options[:zip] = true}
+    opts.on('-z', 'Output Count by Zip ') { |z| @command_options[:zip] = true}
+    opts.on('-a', 'Output By Congregation Area') { |a| @command_options[:area] = true}
+    opts.on('-n', 'Omit Address Information') { |n| @command_options[:noaddr] = true}
   end
   
   option_parser.parse!
@@ -382,6 +536,8 @@ begin
   sub_elders
   # add fields for city/state/zip
   add_city_st_zip
+  # add areas assignment
+  assign_areas
   
   # print data to display
   if @command_options[:debug]
@@ -389,6 +545,8 @@ begin
     data_report # mainly for debugging
   elsif @command_options[:zip]
     print_data(:by => :zip_code)
+  elsif @command_options[:area]
+    print_data(:by => :area)
   else # google map type output
     print_google_map_data( header: true )
   end
